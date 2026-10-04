@@ -1,128 +1,118 @@
+import { useEffect, useState } from "react";
 import "./styles.css";
+import { useDatabase, seedIfEmpty, resetToSeed, clearAll } from "./lib/store";
+import { ComponentList } from "./components/ComponentList";
+import { BatchMerge } from "./components/BatchMerge";
+import { ConflictPanel } from "./components/ConflictPanel";
+import { VersionHistory } from "./components/VersionHistory";
+import { RelationView } from "./components/RelationView";
+import { DimensionLedger } from "./components/DimensionLedger";
+import { DiseaseMap } from "./components/DiseaseMap";
+import { RepairConclusions } from "./components/RepairConclusions";
+import { Badge } from "./components/ui";
 
-const project = {
-  "sourceNo": 8,
-  "id": "hxyfront-62013",
-  "port": 62013,
-  "title": "木结构榫卯构件测绘",
-  "domain": "古建木结构",
-  "prompt": "开发一个古建筑木结构榫卯构件测绘前端项目，测绘人员可以录入建筑名称、构件编号、木材种类、榫卯类型、截面尺寸、病害位置、变形情况和修缮建议。页面需要有构件清单、榫卯类型筛选、尺寸记录表、病害标记图和单栋建筑的构件关系视图。",
-  "palette": [
-    "#854d0e",
-    "#475569",
-    "#0f766e"
-  ],
-  "metrics": [
-    "构件数量",
-    "病害点",
-    "榫卯类型",
-    "待修缮"
-  ],
-  "filters": [
-    "燕尾榫",
-    "透榫",
-    "半榫",
-    "箍头榫"
-  ],
-  "fields": [
-    "建筑名称",
-    "构件编号",
-    "木材种类",
-    "榫卯类型",
-    "截面尺寸",
-    "修缮建议"
-  ],
-  "records": [
-    [
-      "梁架A-03",
-      "透榫",
-      "截面180x240mm",
-      "端部开裂"
-    ],
-    [
-      "柱网C-12",
-      "楠木",
-      "柱脚糟朽",
-      "建议局部墩接"
-    ],
-    [
-      "斗拱D-07",
-      "半榫",
-      "轻微变形",
-      "继续监测"
-    ]
-  ]
-};
+const TABS = [
+  { key: "components", label: "构件清单" },
+  { key: "merge", label: "批次合并" },
+  { key: "conflicts", label: "冲突待确认" },
+  { key: "relations", label: "关系视图" },
+  { key: "conclusions", label: "修缮结论" },
+  { key: "ledger", label: "尺寸台账" },
+  { key: "disease", label: "病害标记图" },
+  { key: "history", label: "版本历史" },
+] as const;
 
-function App() {
+type TabKey = (typeof TABS)[number]["key"];
+
+export default function App() {
+  const db = useDatabase();
+  const [tab, setTab] = useState<TabKey>("components");
+
+  useEffect(() => {
+    seedIfEmpty();
+  }, []);
+
+  const activeCount = db.components.filter((c) => c.status === "active").length;
+  const conflictCount = db.conflicts.filter((c) => c.status === "pending").length;
+  const staleEdgeCount = db.relationEdges.filter((e) => e.status === "stale").length;
+  const staleConcCount = db.repairConclusions.filter((c) => c.status === "stale").length;
+
   return (
     <main className="app">
       <section className="hero">
-        <p>{project.id} · 源提示词{project.sourceNo} · Port {project.port}</p>
-        <h1>{project.title}</h1>
-        <span>{project.prompt}</span>
-      </section>
-
-      <section className="metrics">
-        {project.metrics.map((metric: string, index: number) => (
-          <article key={metric}>
-            <small>{metric}</small>
-            <strong>{[28, 6, 14, 91][index] ?? 10}</strong>
-          </article>
-        ))}
-      </section>
-
-      <section className="workspace">
-        <aside className="panel">
-          <h2>{project.domain}分类</h2>
-          <div className="chips">
-            {project.filters.map((item: string) => (
-              <button key={item}>{item}</button>
-            ))}
-          </div>
-        </aside>
-
-        <section className="panel form-panel">
-          <div className="heading">
-            <div>
-              <p>专业字段</p>
-              <h2>新增记录</h2>
-            </div>
-            <button className="primary">保存记录</button>
-          </div>
-          <div className="field-grid">
-            {project.fields.map((field: string) => (
-              <label key={field}>
-                <span>{field}</span>
-                <input placeholder={"填写" + field} />
-              </label>
-            ))}
-          </div>
-        </section>
-      </section>
-
-      <section className="panel">
-        <div className="heading">
+        <div className="hero-top">
           <div>
-            <p>近期记录</p>
-            <h2>工作台摘要</h2>
+            <p className="hero-tag">古建木结构 · 榫卯构件测绘 · 离线同步</p>
+            <h1>断网测绘与回站合并</h1>
+            <p className="hero-sub">
+              几支测绘队分头进不同古建，断网时各记一份，回站后同步合并同一建筑的构件截面、木材和病害落点。
+              并发修改保留两份待确认，尺寸变更立即失效重算，保存失败断点续传，重传只认第一次，无批次号按日期归档。
+            </p>
           </div>
-          <button>导出CSV</button>
+          <div className="hero-actions">
+            <button onClick={resetToSeed}>重置演示数据</button>
+            <button onClick={clearAll}>清空</button>
+          </div>
         </div>
-        <div className="records">
-          {project.records.map((record: string[], index: number) => (
-            <article key={record.join("-")}>
-              <b>{String(index + 1).padStart(2, "0")}</b>
-              <div>
-                <h3>{record[0]}</h3>
-                <p>{record.slice(1).join(" · ")}</p>
-              </div>
-            </article>
-          ))}
+
+        <div className="hero-metrics">
+          <div className="hero-metric">
+            <strong>{activeCount}</strong>
+            <span>当前构件</span>
+          </div>
+          <div className="hero-metric">
+            <strong>{conflictCount}</strong>
+            <span>待确认冲突</span>
+          </div>
+          <div className="hero-metric">
+            <strong>{staleEdgeCount + staleConcCount}</strong>
+            <span>待重算成果</span>
+          </div>
+          <div className="hero-metric">
+            <strong>{db.batches.length}</strong>
+            <span>已归档批次</span>
+          </div>
         </div>
       </section>
+
+      <nav className="tabs">
+        {TABS.map((t) => (
+          <button
+            key={t.key}
+            className={tab === t.key ? "tab active" : "tab"}
+            onClick={() => setTab(t.key)}
+          >
+            {t.label}
+            {t.key === "conflicts" && conflictCount > 0 && (
+              <Badge tone="danger">{conflictCount}</Badge>
+            )}
+            {t.key === "relations" && staleEdgeCount > 0 && (
+              <Badge tone="warning">{staleEdgeCount}</Badge>
+            )}
+            {t.key === "conclusions" && staleConcCount > 0 && (
+              <Badge tone="warning">{staleConcCount}</Badge>
+            )}
+          </button>
+        ))}
+      </nav>
+
+      <section className="tab-body">
+        {tab === "components" && <ComponentList />}
+        {tab === "merge" && <BatchMerge />}
+        {tab === "conflicts" && <ConflictPanel />}
+        {tab === "relations" && <RelationView />}
+        {tab === "conclusions" && <RepairConclusions />}
+        {tab === "ledger" && <DimensionLedger />}
+        {tab === "disease" && <DiseaseMap />}
+        {tab === "history" && <VersionHistory />}
+      </section>
+
+      <footer className="footer">
+        <p>
+          数据存储于浏览器本地（localStorage），演示离线录入与回站合并流程。
+          合并引擎：并发冲突保留 · 尺寸变更失效 · 断点续传 · 批次幂等 · 日期归档。
+        </p>
+      </footer>
     </main>
   );
 }
-
-export default App;
